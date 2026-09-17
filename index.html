@@ -26,7 +26,7 @@
 
     header h1 {
       font-size: 1.5rem;
-      color: #ea1d2c; /* Cor iFood */
+      color: #ea1d2c;
     }
 
     header p {
@@ -34,7 +34,7 @@
       color: #666;
     }
 
-    /* Tela de Câmera (Modal / Overlay) */
+    /* Tela de Câmera */
     #scanner-container {
       display: none;
       position: fixed;
@@ -102,11 +102,11 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      border-left: 6px solid #ffaa00; /* Padrão: Pendente */
+      border-left: 6px solid #ffaa00;
     }
 
     .card-pedido.concluido {
-      border-left-color: #2e7d32; /* Concluído */
+      border-left-color: #2e7d32;
       opacity: 0.75;
     }
 
@@ -259,21 +259,20 @@
     <button class="close-scanner-btn" onclick="fecharScanner()">Fechar X</button>
     <video id="video" autoplay muted playsinline></video>
     <div class="scanner-overlay"></div>
-    <p style="color:white; margin-top:20px;">Centralize o código de 8 dígitos</p>
+    <p style="color:white; margin-top:20px;">Centralize o código do localizador</p>
   </div>
 
-  <!-- Biblioteca Tesseract.js para leitura OCR de texto pela câmera -->
+  <!-- Biblioteca Tesseract.js para OCR -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
   <script>
-    // URL do Portal do Parceiro / Confirmação do iFood
-   const IFOOD_CONFIRM_URL = "https://confirmacao-entrega-propria.ifood.com.br/";
+    // Link direcionado para Confirmação de Entrega Própria
+    const IFOOD_CONFIRM_URL = "https://confirmacao-entrega-propria.ifood.com.br/"; 
 
     let pedidos = JSON.parse(localStorage.getItem('ifood_pedidos')) || [];
     let streamCamera = null;
     let isScanning = false;
 
-    // Salvar e Renderizar
     function salvar() {
       localStorage.setItem('ifood_pedidos', JSON.stringify(pedidos));
       render();
@@ -311,12 +310,10 @@
       });
     }
 
-    // Adicionar Pedido
     function adicionarCodigo(codigo) {
       const codLimpo = codigo.replace(/\D/g, '');
       if (codLimpo.length !== 8) return;
 
-      // Evita duplicados recentes
       if (pedidos.some(p => p.codigo === codLimpo)) {
         return;
       }
@@ -340,15 +337,12 @@
       }
     }
 
-    // Ação Principal: Copiar + Abrir Site
     async function confirmarEntrega(index) {
       const pedido = pedidos[index];
       
-      // 1. Copia o código para a área de transferência
       try {
         await navigator.clipboard.writeText(pedido.codigo);
       } catch (err) {
-        // Fallback para dispositivos sem suporte ao navigator.clipboard
         const textArea = document.createElement("textarea");
         textArea.value = pedido.codigo;
         document.body.appendChild(textArea);
@@ -357,11 +351,9 @@
         document.body.removeChild(textArea);
       }
 
-      // 2. Marca como concluído no app local
       pedidos[index].status = 'concluido';
       salvar();
 
-      // 3. Redireciona / Abre o site do iFood
       window.open(IFOOD_CONFIRM_URL, '_blank');
     }
 
@@ -375,7 +367,6 @@
       salvar();
     }
 
-    // Lógica do Scanner de Câmera (OCR)
     async function abrirScanner() {
       document.getElementById('scanner-container').style.display = 'flex';
       isScanning = true;
@@ -402,46 +393,41 @@
     }
 
     async function processVideoFrame() {
-  if (!isScanning) return;
-  const video = document.getElementById('video');
+      if (!isScanning) return;
+      const video = document.getElementById('video');
 
-  if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Lê todas as palavras e números da comanda
-    const { data: { text } } = await Tesseract.recognize(canvas, 'por+eng');
+        const { data: { text } } = await Tesseract.recognize(canvas, 'por+eng');
+        const textoLimpo = text.replace(/\s+/g, ' ');
 
-    // Normaliza o texto removendo quebras de linha e múltiplos espaços
-    const textoLimpo = text.replace(/\s+/g, ' ');
+        const regexLocalizador = /(?:localizador|loc|id)[\s:]*(\d{4}[\s-]?\d{4}|\d{8})/i;
+        const match = textoLimpo.match(regexLocalizador);
 
-    // 1. Busca por padrões como "Localizador: 6332 8257" ou "Localizador: 63328257"
-    const regexLocalizador = /(?:localizador|loc|id)[\s:]*(\d{4}[\s-]?\d{4}|\d{8})/i;
-    const match = textoLimpo.match(regexLocalizador);
+        if (match && match[1]) {
+          const codEncontrado = match[1].replace(/\D/g, '');
 
-    if (match && match[1]) {
-      // Remove espaços e traços para manter apenas os 8 dígitos
-      const codEncontrado = match[1].replace(/\D/g, '');
+          if (codEncontrado.length === 8) {
+            adicionarCodigo(codEncontrado);
 
-      if (codEncontrado.length === 8) {
-        adicionarCodigo(codEncontrado);
+            if (navigator.vibrate) navigator.vibrate(200);
 
-        if (navigator.vibrate) navigator.vibrate(200);
+            fecharScanner();
+            return;
+          }
+        }
+      }
 
-        fecharScanner();
-        return;
+      if (isScanning) {
+        setTimeout(processVideoFrame, 800);
       }
     }
-  }
 
-  if (isScanning) {
-    setTimeout(processVideoFrame, 800); // Processa a cada 0.8s
-  }
-}
-    // Renderização inicial
     render();
   </script>
 </body>
