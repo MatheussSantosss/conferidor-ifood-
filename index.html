@@ -402,39 +402,45 @@
     }
 
     async function processVideoFrame() {
-      if (!isScanning) return;
-      const video = document.getElementById('video');
+  if (!isScanning) return;
+  const video = document.getElementById('video');
 
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        // Realiza o reconhecimento via Tesseract OCR
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        const { data: { text } } = await Tesseract.recognize(canvas, 'eng', {
-          tessedit_char_whitelist: '0123456789'
-        });
+    // Lê todas as palavras e números da comanda
+    const { data: { text } } = await Tesseract.recognize(canvas, 'por+eng');
 
-        const matches = text.match(/\b\d{8}\b/g);
-        if (matches && matches.length > 0) {
-          const codEncontrado = matches[0];
-          adicionarCodigo(codEncontrado);
-          
-          // Feedback tátil/sonoro simples se disponível
-          if (navigator.vibrate) navigator.vibrate(200);
-          
-          fecharScanner(); // Fecha ao encontrar um código (remover se quiser escaneamento contínuo sem fechar)
-          return;
-        }
-      }
+    // Normaliza o texto removendo quebras de linha e múltiplos espaços
+    const textoLimpo = text.replace(/\s+/g, ' ');
 
-      if (isScanning) {
-        setTimeout(processVideoFrame, 1000); // Checa a cada 1 segundo para evitar sobrecarga
+    // 1. Busca por padrões como "Localizador: 6332 8257" ou "Localizador: 63328257"
+    const regexLocalizador = /(?:localizador|loc|id)[\s:]*(\d{4}[\s-]?\d{4}|\d{8})/i;
+    const match = textoLimpo.match(regexLocalizador);
+
+    if (match && match[1]) {
+      // Remove espaços e traços para manter apenas os 8 dígitos
+      const codEncontrado = match[1].replace(/\D/g, '');
+
+      if (codEncontrado.length === 8) {
+        adicionarCodigo(codEncontrado);
+
+        if (navigator.vibrate) navigator.vibrate(200);
+
+        fecharScanner();
+        return;
       }
     }
+  }
 
+  if (isScanning) {
+    setTimeout(processVideoFrame, 800); // Processa a cada 0.8s
+  }
+}
     // Renderização inicial
     render();
   </script>
